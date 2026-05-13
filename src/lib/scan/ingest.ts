@@ -13,6 +13,7 @@ import {
 } from "@/lib/sec";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import type { SalesActionBrief, ScanEvent, ScanMode } from "@/lib/types";
+import { activeModelName, BRIEF_CONFIDENCE_THRESHOLD } from "@/lib/scan/config";
 
 export type IngestedChunk = {
   id?: string;
@@ -42,6 +43,11 @@ export type IngestionResult = {
     shouldNotify: boolean;
     channel: "none" | "brief_created";
     message: string;
+  };
+  telemetry: {
+    model: string;
+    briefConfidenceThreshold: number;
+    classificationsRun: number;
   };
   errors: string[];
   summary: {
@@ -219,6 +225,7 @@ async function persistBrief(input: {
   sellerCompanyId: string;
   targetCompanyId: string;
   filingId: string;
+  sourceCandidateId?: string;
   brief: Awaited<ReturnType<typeof generateBrief>>;
 }) {
   const supabase = getSupabaseServiceClient();
@@ -229,6 +236,7 @@ async function persistBrief(input: {
       seller_company_id: input.sellerCompanyId,
       target_company_id: input.targetCompanyId,
       filing_id: input.filingId,
+      source_candidate_id: input.sourceCandidateId ?? null,
       title: input.brief.title,
       trigger_type: input.brief.triggerType,
       urgency: input.brief.urgency,
@@ -254,6 +262,7 @@ async function persistScanEvent(scanRunId: string, event: ScanEvent) {
   const { error } = await supabase.from("scan_events").insert({
     scan_run_id: scanRunId,
     event_type: event.type,
+    candidate_id: event.candidateId ?? null,
     ticker: event.ticker ?? null,
     target_company: event.targetCompany ?? null,
     accession_number: event.accessionNumber ?? null,
@@ -286,6 +295,11 @@ export async function ingestRecent8Ks(
       shouldNotify: false,
       channel: "none",
       message: "No notification: scan has not completed.",
+    },
+    telemetry: {
+      model: activeModelName(),
+      briefConfidenceThreshold: BRIEF_CONFIDENCE_THRESHOLD,
+      classificationsRun: 0,
     },
     errors: [],
     summary: {
@@ -438,6 +452,7 @@ export async function ingestRecent8Ks(
             result.summary.candidatesFound += 1;
             await logEvent({
               type: "candidate_found",
+              candidateId,
               ticker: ingestedChunk.ticker,
               targetCompany: ingestedChunk.targetCompanyName,
               accessionNumber: ingestedChunk.accessionNumber,
@@ -458,6 +473,7 @@ export async function ingestRecent8Ks(
               module: signalModule,
               chunkText: ingestedChunk.text,
             });
+            result.telemetry.classificationsRun += 1;
 
             await updateCandidateClassification({
               candidateId,
@@ -469,6 +485,7 @@ export async function ingestRecent8Ks(
             if (
               classification.should_generate_brief &&
               !classification.is_boilerplate &&
+              classification.confidence >= BRIEF_CONFIDENCE_THRESHOLD &&
               (classification.classification === "Actionable Signal" ||
                 classification.classification === "High-Urgency Signal")
             ) {
@@ -488,6 +505,7 @@ export async function ingestRecent8Ks(
                 sellerCompanyId,
                 targetCompanyId,
                 filingId,
+                sourceCandidateId: candidateId,
                 brief,
               });
               result.summary.briefsGenerated += 1;
@@ -502,6 +520,7 @@ export async function ingestRecent8Ks(
               });
               await logEvent({
                 type: "brief_generated",
+                candidateId,
                 ticker: ingestedChunk.ticker,
                 targetCompany: ingestedChunk.targetCompanyName,
                 accessionNumber: ingestedChunk.accessionNumber,
@@ -518,6 +537,7 @@ export async function ingestRecent8Ks(
             } else {
               await logEvent({
                 type: "candidate_rejected",
+                candidateId,
                 ticker: ingestedChunk.ticker,
                 targetCompany: ingestedChunk.targetCompanyName,
                 accessionNumber: ingestedChunk.accessionNumber,

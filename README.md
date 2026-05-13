@@ -65,6 +65,14 @@ npm run test:signals
 5. The server resolves tickers to CIKs, fetches recent 8-K filings, parses filing text, runs deterministic prefiltering, classifies candidate chunks with OpenAI, and stores briefs in Supabase.
 6. Review generated briefs, update status, copy outreach angle, or export full brief text.
 
+## How to Demo SignalLens
+
+Use **Fixture** scan mode when you need a guaranteed brief for a live demo. It returns a deterministic CrowdStrike cybersecurity incident example without relying on fresh SEC data.
+
+Use **New only** for the production-like monitoring behavior. Already-seen accession numbers are skipped.
+
+Use **Reprocess** for tuning and debugging recent filings that were already stored.
+
 ## Notes
 
 - The demo result button works without credentials and previews the review workflow.

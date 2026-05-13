@@ -338,3 +338,32 @@ Prepared the scanner for scheduled operation and monitored-target management wit
 
 ### Next
 - Build reliable fixture/demo scan mode, threshold config, and candidate promotion.
+
+## Phase 10 - Reliable Demo Harness + Threshold Tuning
+
+### Summary
+Added deterministic demo behavior and explicit signal tuning controls.
+
+### Decisions
+- Add `fixture` scan mode for predictable demos.
+- Add a 75% brief confidence threshold for actionable/high-urgency candidates.
+- Show model, threshold, and classification count in the dashboard.
+- Add candidate promotion endpoint for reviewer-driven tuning.
+
+### Problems
+- Existing Supabase projects need to run `supabase/phase10_demo_threshold_promotion.sql`.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- Fixture scan result.
+- Brief confidence threshold config.
+- Model/threshold telemetry.
+- Candidate promotion API.
+- README demo instructions.
+
+### Next
+- Add more seller profiles and prove the same filing can matter differently by seller.

@@ -14,10 +14,11 @@ export type ScanSummary = {
   filingsSuppressed: number;
 };
 
-export type ScanMode = "new" | "reprocess";
+export type ScanMode = "new" | "reprocess" | "fixture";
 
 export type ScanEvent = {
   id?: string;
+  candidateId?: string;
   type:
     | "filing_processed"
     | "filing_skipped"
@@ -66,6 +67,11 @@ export type ScanResult = {
   scanRunId: string;
   mode?: ScanMode;
   summary: ScanSummary;
+  telemetry?: {
+    model: string;
+    briefConfidenceThreshold: number;
+    classificationsRun: number;
+  };
   briefs: SalesActionBrief[];
   events: ScanEvent[];
   notification: {

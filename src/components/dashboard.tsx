@@ -29,6 +29,11 @@ const emptyResult: ScanResult = {
     briefsGenerated: 0,
     filingsSuppressed: 0,
   },
+  telemetry: {
+    model: "gpt-4o-mini",
+    briefConfidenceThreshold: 0.75,
+    classificationsRun: 0,
+  },
   briefs: [],
   events: [],
   notification: {
@@ -210,6 +215,11 @@ export function Dashboard() {
         briefsGenerated: 1,
         filingsSuppressed: 6,
       },
+      telemetry: {
+        model: "gpt-4o-mini",
+        briefConfidenceThreshold: 0.75,
+        classificationsRun: 1,
+      },
       briefs: [mockBrief],
       events: mockEvents,
       notification: {
@@ -313,6 +323,43 @@ export function Dashboard() {
     }
   }
 
+  async function promoteCandidate(event: ScanEvent) {
+    if (!event.candidateId || event.candidateId.startsWith("fixture-")) return;
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `/api/candidates/${event.candidateId}/promote`,
+        { method: "POST" },
+      );
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error ?? "Promotion failed.");
+
+      const promotedBrief = data as SalesActionBrief;
+      setResult((current) => ({
+        ...current,
+        briefs: [promotedBrief, ...current.briefs],
+        summary: {
+          ...current.summary,
+          briefsGenerated: current.summary.briefsGenerated + 1,
+        },
+        notification: {
+          shouldNotify: true,
+          channel: "brief_created",
+          message: "1 candidate manually promoted to a brief.",
+        },
+      }));
+      setSelectedBriefId(promotedBrief.id);
+    } catch (promotionError) {
+      setError(
+        promotionError instanceof Error
+          ? promotionError.message
+          : "Promotion failed unexpectedly.",
+      );
+    }
+  }
+
   async function copyText(text: string) {
     await navigator.clipboard.writeText(text);
   }
@@ -367,6 +414,7 @@ export function Dashboard() {
               {[
                 ["new", "New only"],
                 ["reprocess", "Reprocess"],
+                ["fixture", "Fixture"],
               ].map(([value, label]) => (
                 <button
                   className={`h-10 text-sm font-semibold ${
@@ -393,7 +441,7 @@ export function Dashboard() {
             {isScanning ? "Scanning SEC filings..." : "Run Scan"}
           </button>
           <button
-            className="mt-3 h-10 w-full border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#334155] transition hover:bg-[#f1f5f9]"
+            className="mt-3 h-10 w-full border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#334155] transition hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={normalizedTickers.length === 0}
             onClick={saveMonitoredTargets}
             type="button"
@@ -453,6 +501,27 @@ export function Dashboard() {
             ))}
           </div>
 
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="border border-[#d5dae3] bg-white p-3 text-sm text-[#334155]">
+              Model: <span className="font-semibold">{result.telemetry?.model}</span>
+            </div>
+            <div className="border border-[#d5dae3] bg-white p-3 text-sm text-[#334155]">
+              Brief threshold:{" "}
+              <span className="font-semibold">
+                {Math.round(
+                  (result.telemetry?.briefConfidenceThreshold ?? 0.75) * 100,
+                )}
+                %
+              </span>
+            </div>
+            <div className="border border-[#d5dae3] bg-white p-3 text-sm text-[#334155]">
+              Classifications:{" "}
+              <span className="font-semibold">
+                {result.telemetry?.classificationsRun ?? 0}
+              </span>
+            </div>
+          </div>
+
           <div className="mt-6 grid gap-5 xl:grid-cols-[360px_1fr]">
             <section className="border border-[#d5dae3] bg-white">
               <div className="border-b border-[#d5dae3] p-4">
@@ -498,7 +567,7 @@ export function Dashboard() {
                   updateStatus={updateStatus}
                 />
               ) : selectedEvent ? (
-                <EventDetail event={selectedEvent} />
+                <EventDetail event={selectedEvent} promoteCandidate={promoteCandidate} />
               ) : (
                 <div className="flex min-h-[520px] items-center justify-center p-8 text-center text-[#64748b]">
                   Select a generated brief or scan log event to inspect the
@@ -641,7 +710,13 @@ function BriefDetail({
   );
 }
 
-function EventDetail({ event }: { event: ScanEvent }) {
+function EventDetail({
+  event,
+  promoteCandidate,
+}: {
+  event: ScanEvent;
+  promoteCandidate: (event: ScanEvent) => Promise<void>;
+}) {
   return (
     <div className="p-5">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#64748b]">
@@ -672,6 +747,16 @@ function EventDetail({ event }: { event: ScanEvent }) {
           {event.accessionNumber ?? "N/A"}
           {event.filingUrl ? ` / ${event.filingUrl}` : ""}
         </BriefSection>
+        {event.type === "candidate_rejected" && event.candidateId ? (
+          <button
+            className="h-10 w-fit bg-[#111827] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={event.candidateId.startsWith("fixture-")}
+            onClick={() => promoteCandidate(event)}
+            type="button"
+          >
+            Promote candidate to brief
+          </button>
+        ) : null}
       </div>
     </div>
   );

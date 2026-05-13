@@ -110,6 +110,7 @@ create table if not exists scan_runs (
 create table if not exists scan_events (
   id uuid primary key default gen_random_uuid(),
   scan_run_id uuid not null references scan_runs(id) on delete cascade,
+  candidate_id uuid references signal_candidates(id) on delete set null,
   event_type text not null,
   ticker text,
   target_company text,
@@ -145,6 +146,7 @@ create table if not exists briefs (
   seller_company_id uuid not null references seller_companies(id) on delete cascade,
   target_company_id uuid not null references target_companies(id) on delete cascade,
   filing_id uuid not null references filings(id) on delete cascade,
+  source_candidate_id uuid references signal_candidates(id) on delete set null,
   title text not null,
   trigger_type text not null,
   urgency text not null,
