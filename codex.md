@@ -78,3 +78,33 @@ Built the first operational SignalLens dashboard surface with local scan state a
 
 ### Next
 - Add SEC ticker resolution, 8-K fetching, document parsing, and persistence.
+
+## Phase 3 - SEC Fetch + Filing Parser
+
+### Summary
+Added the server-side SEC ingestion path for resolving tickers, fetching recent 8-K filings, parsing document HTML, chunking text, and persisting ingestion output.
+
+### Decisions
+- Use SEC's public ticker mapping and company submissions API directly.
+- Limit each target to the three most recent 8-K filings in the first slice to protect demo latency and SEC fair-access posture.
+- Require `SEC_USER_AGENT` before making SEC requests.
+- Persist scan runs, target companies, filings, and chunks through server-only Supabase access.
+
+### Problems
+- Full ingestion cannot be exercised locally until Supabase env vars and seeded schema are available.
+- Exhibit 99.1 discovery is deferred; the current implementation reliably fetches the primary 8-K document first.
+
+### Verification
+- `npm run lint` passed.
+- `npm run build` passed after tightening SEC resolver return types.
+
+### Built
+- SEC ticker resolution.
+- Recent 8-K metadata fetch.
+- Primary document fetch.
+- HTML-to-readable-text parser.
+- Filing chunker.
+- `/api/scan` route for ingestion.
+
+### Next
+- Add keyword prefiltering, boilerplate suppression, candidate persistence, and fixtures.
