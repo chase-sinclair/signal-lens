@@ -137,3 +137,32 @@ Added deterministic signal filtering so the system creates candidates only when 
 
 ### Next
 - Add OpenAI structured classification and brief generation for persisted candidates.
+
+## Phase 5 - OpenAI Classification + Brief Generation
+
+### Summary
+Added the required OpenAI structured-output path. Candidate chunks now go through LLM classification and only actionable or high-urgency results generate stored briefs.
+
+### Decisions
+- Use OpenAI Responses API with strict JSON schema outputs.
+- Keep classification and brief generation separate so suppression remains explicit.
+- Fail the scan with a clear error if `OPENAI_API_KEY` is missing.
+- Default `OPENAI_MODEL` to `gpt-5.5`.
+
+### Problems
+- Live OpenAI execution cannot be verified locally without an API key.
+- Lint rejected a local variable named `module`, so it was renamed to `signalModule`.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- Structured classification schema.
+- Structured Sales Action Brief schema.
+- Candidate LLM result persistence.
+- Brief generation and Supabase persistence for actionable/high-urgency candidates.
+
+### Next
+- Connect the dashboard to the real scan route and load persisted briefs into the review workflow.

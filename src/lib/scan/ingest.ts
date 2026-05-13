@@ -1,7 +1,9 @@
 import "server-only";
 
 import { htmlToText, chunkFilingText } from "@/lib/filing-parser";
+import { classifyCandidate, generateBrief } from "@/lib/openai";
 import { prefilterChunk } from "@/lib/signal-prefilter";
+import { crowdStrikeProfile } from "@/lib/signal-profile";
 import {
   fetchFilingText,
   fetchRecent8Ks,
@@ -148,14 +150,68 @@ async function persistCandidate(input: {
   rationale: string;
 }) {
   const supabase = getSupabaseServiceClient();
-  const { error } = await supabase.from("signal_candidates").insert({
+  const { data, error } = await supabase
+    .from("signal_candidates")
+    .insert({
+      scan_run_id: input.scanRunId,
+      filing_id: input.filingId,
+      chunk_id: input.chunkId,
+      seller_company_id: input.sellerCompanyId,
+      signal_module_id: input.signalModuleId,
+      prefilter_keyword_matches: input.keywordMatches,
+      rationale: input.rationale,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data.id as string;
+}
+
+async function updateCandidateClassification(input: {
+  candidateId: string;
+  classification: string;
+  confidence: number;
+  rationale: string;
+}) {
+  const supabase = getSupabaseServiceClient();
+  const { error } = await supabase
+    .from("signal_candidates")
+    .update({
+      llm_classification: input.classification,
+      llm_confidence: input.confidence,
+      rationale: input.rationale,
+    })
+    .eq("id", input.candidateId);
+
+  if (error) throw error;
+}
+
+async function persistBrief(input: {
+  scanRunId: string;
+  sellerCompanyId: string;
+  targetCompanyId: string;
+  filingId: string;
+  brief: Awaited<ReturnType<typeof generateBrief>>;
+}) {
+  const supabase = getSupabaseServiceClient();
+  const { error } = await supabase.from("briefs").insert({
     scan_run_id: input.scanRunId,
-    filing_id: input.filingId,
-    chunk_id: input.chunkId,
     seller_company_id: input.sellerCompanyId,
-    signal_module_id: input.signalModuleId,
-    prefilter_keyword_matches: input.keywordMatches,
-    rationale: input.rationale,
+    target_company_id: input.targetCompanyId,
+    filing_id: input.filingId,
+    title: input.brief.title,
+    trigger_type: input.brief.triggerType,
+    urgency: input.brief.urgency,
+    confidence_score: input.brief.confidenceScore,
+    evidence_snippet: input.brief.evidenceSnippet,
+    why_it_matters: input.brief.whyItMatters,
+    buyer_personas: input.brief.buyerPersonas,
+    suggested_sales_motion: input.brief.suggestedSalesMotion,
+    suggested_outreach_angle: input.brief.suggestedOutreachAngle,
+    outreach_sensitivity: input.brief.outreachSensitivity,
+    recommended_next_step: input.brief.recommendedNextStep,
+    why_flagged: input.brief.whyFlagged,
   });
 
   if (error) throw error;
@@ -242,7 +298,7 @@ export async function ingestRecent8Ks(tickers: string[]) {
           );
 
           for (const match of prefilterMatches) {
-            await persistCandidate({
+            const candidateId = await persistCandidate({
               scanRunId: result.scanRunId,
               filingId,
               chunkId: ingestedChunk.id,
@@ -252,6 +308,51 @@ export async function ingestRecent8Ks(tickers: string[]) {
               rationale: match.rationale,
             });
             result.summary.candidatesFound += 1;
+
+            const signalModule = crowdStrikeProfile.modules.find(
+              (item) => item.name === match.moduleName,
+            );
+
+            if (!signalModule) continue;
+
+            const classification = await classifyCandidate({
+              module: signalModule,
+              chunkText: ingestedChunk.text,
+            });
+
+            await updateCandidateClassification({
+              candidateId,
+              classification: classification.classification,
+              confidence: classification.confidence,
+              rationale: classification.rationale,
+            });
+
+            if (
+              classification.should_generate_brief &&
+              !classification.is_boilerplate &&
+              (classification.classification === "Actionable Signal" ||
+                classification.classification === "High-Urgency Signal")
+            ) {
+              const brief = await generateBrief({
+                module: signalModule,
+                classification,
+                targetCompany: ingestedChunk.targetCompanyName,
+                ticker: ingestedChunk.ticker,
+                filingType: ingestedChunk.filingType,
+                filingDate: ingestedChunk.filingDate,
+                filingUrl: ingestedChunk.secUrl,
+                chunkText: ingestedChunk.text,
+              });
+
+              await persistBrief({
+                scanRunId: result.scanRunId,
+                sellerCompanyId,
+                targetCompanyId,
+                filingId,
+                brief,
+              });
+              result.summary.briefsGenerated += 1;
+            }
           }
         }
       }
