@@ -220,3 +220,21 @@ Added setup documentation and completed final local verification for the MVP ver
 
 ### Next
 - Provide credentials, apply schema/seed in Supabase, and run a live scan.
+
+## Environment Placeholder Setup
+
+### Summary
+Added a local `.env` file with placeholder values for OpenAI, Supabase, and SEC EDGAR access.
+
+### Decisions
+- Keep placeholder values obvious so real secrets are easy to replace.
+- Leave `.env` ignored by git unless explicitly force-added later.
+
+### Problems
+- None.
+
+### Verification
+- Not run; this was a configuration placeholder-only change.
+
+### Built
+- Local `.env` placeholder file.
