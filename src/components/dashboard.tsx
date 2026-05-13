@@ -31,6 +31,11 @@ const emptyResult: ScanResult = {
   },
   briefs: [],
   events: [],
+  notification: {
+    shouldNotify: false,
+    channel: "none",
+    message: "No notification: no scan has run.",
+  },
   errors: [],
 };
 
@@ -207,6 +212,11 @@ export function Dashboard() {
       },
       briefs: [mockBrief],
       events: mockEvents,
+      notification: {
+        shouldNotify: true,
+        channel: "brief_created",
+        message: "1 SignalLens brief generated for CrowdStrike.",
+      },
       errors: [],
     });
     setSelectedBriefId(mockBrief.id);
@@ -242,6 +252,33 @@ export function Dashboard() {
       );
     } finally {
       setIsScanning(false);
+    }
+  }
+
+  async function saveMonitoredTargets() {
+    setError(null);
+
+    try {
+      const response = await fetch("/api/monitored-targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: normalizedTickers }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error ?? "Save failed.");
+
+      setError(
+        data.errors?.length
+          ? `Saved ${data.saved} monitored target(s). ${data.errors.join(" ")}`
+          : `Saved ${data.saved} monitored target(s).`,
+      );
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save monitored targets.",
+      );
     }
   }
 
@@ -357,6 +394,14 @@ export function Dashboard() {
           </button>
           <button
             className="mt-3 h-10 w-full border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#334155] transition hover:bg-[#f1f5f9]"
+            disabled={normalizedTickers.length === 0}
+            onClick={saveMonitoredTargets}
+            type="button"
+          >
+            Save monitored targets
+          </button>
+          <button
+            className="mt-3 h-10 w-full border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#334155] transition hover:bg-[#f1f5f9]"
             onClick={loadDemo}
             type="button"
           >
@@ -469,6 +514,9 @@ export function Dashboard() {
               <p className="mt-1 text-sm text-[#64748b]">
                 Shows why filings were skipped, suppressed, rejected, or turned
                 into briefs.
+              </p>
+              <p className="mt-2 text-sm font-medium text-[#334155]">
+                {result.notification.message}
               </p>
             </div>
             {result.events.length === 0 ? (

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { errorMessage } from "@/lib/errors";
-import { ingestRecent8Ks } from "@/lib/scan/ingest";
+import { runSignalScan } from "@/lib/scan/run";
 
 const scanRequestSchema = z.object({
   tickers: z.array(z.string()).min(1).max(25),
@@ -21,7 +21,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await ingestRecent8Ks(parsed.data.tickers, {
+    const result = await runSignalScan({
+      tickers: parsed.data.tickers,
       mode: parsed.data.mode,
     });
     return NextResponse.json(result);

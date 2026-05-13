@@ -58,9 +58,14 @@ create table if not exists monitored_targets (
   seller_company_id uuid not null references seller_companies(id) on delete cascade,
   target_company_id uuid not null references target_companies(id) on delete cascade,
   active boolean not null default true,
+  last_checked_at timestamptz,
+  last_filing_seen_accession text,
   created_at timestamptz not null default now(),
   unique (seller_company_id, target_company_id)
 );
+
+create index if not exists monitored_targets_active_idx
+  on monitored_targets (seller_company_id, active);
 
 create table if not exists filings (
   id uuid primary key default gen_random_uuid(),

@@ -310,3 +310,31 @@ Added the monitoring trust layer: scans now distinguish new filings from already
 
 ### Next
 - Apply `supabase/phase8_scan_events.sql`, then live-test new-only skip behavior and reprocess mode.
+
+## Phase 9 - Automation Readiness
+
+### Summary
+Prepared the scanner for scheduled operation and monitored-target management without adding an external notification provider yet.
+
+### Decisions
+- Extract scan execution behind `runSignalScan` so manual API and future cron can call the same server path.
+- Keep actual Slack/email out of scope for now; return a notification-ready result object instead.
+- Add monitored target persistence for CrowdStrike.
+- Add `last_checked_at` and `last_filing_seen_accession` columns as automation metadata.
+
+### Problems
+- Existing Supabase projects need to run `supabase/phase9_automation_readiness.sql`.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- Reusable scan runner.
+- Monitored-target save API.
+- Dashboard action to save monitored targets.
+- Notification-ready scan result summary.
+
+### Next
+- Build reliable fixture/demo scan mode, threshold config, and candidate promotion.

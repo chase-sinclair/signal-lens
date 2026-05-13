@@ -38,6 +38,11 @@ export type IngestionResult = {
   chunks: IngestedChunk[];
   briefs: SalesActionBrief[];
   events: ScanEvent[];
+  notification: {
+    shouldNotify: boolean;
+    channel: "none" | "brief_created";
+    message: string;
+  };
   errors: string[];
   summary: {
     filingsScanned: number;
@@ -277,6 +282,11 @@ export async function ingestRecent8Ks(
     chunks: [],
     briefs: [],
     events: [],
+    notification: {
+      shouldNotify: false,
+      channel: "none",
+      message: "No notification: scan has not completed.",
+    },
     errors: [],
     summary: {
       filingsScanned: 0,
@@ -558,6 +568,21 @@ export async function ingestRecent8Ks(
       total_filings_suppressed: result.summary.filingsSuppressed,
     })
     .eq("id", result.scanRunId);
+
+  result.notification =
+    result.summary.briefsGenerated > 0
+      ? {
+          shouldNotify: true,
+          channel: "brief_created",
+          message: `${result.summary.briefsGenerated} SignalLens brief${
+            result.summary.briefsGenerated === 1 ? "" : "s"
+          } generated for CrowdStrike.`,
+        }
+      : {
+          shouldNotify: false,
+          channel: "none",
+          message: "No notification: no actionable briefs generated.",
+        };
 
   return result;
 }

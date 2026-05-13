@@ -68,5 +68,10 @@ export type ScanResult = {
   summary: ScanSummary;
   briefs: SalesActionBrief[];
   events: ScanEvent[];
+  notification: {
+    shouldNotify: boolean;
+    channel: "none" | "brief_created";
+    message: string;
+  };
   errors: string[];
 };
