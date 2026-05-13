@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { errorMessage } from "@/lib/errors";
+import { sendScanNotification } from "@/lib/notifications";
 import { fixtureScanResult } from "@/lib/scan/fixture";
 import { runSignalScan } from "@/lib/scan/run";
 
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
       tickers: parsed.data.tickers,
       mode: parsed.data.mode,
     });
+    await sendScanNotification(result);
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

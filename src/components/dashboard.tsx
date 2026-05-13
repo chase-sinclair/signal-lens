@@ -366,6 +366,30 @@ export function Dashboard() {
     }
   }
 
+  async function submitFeedback(brief: SalesActionBrief, relevant: boolean) {
+    if (brief.id.startsWith("demo-") || brief.id.startsWith("fixture-")) {
+      setError(`Marked fixture brief as ${relevant ? "relevant" : "not relevant"}.`);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/briefs/${brief.id}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relevant, rating: relevant ? 5 : 2 }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Feedback failed.");
+      setError(`Feedback saved: ${relevant ? "relevant" : "not relevant"}.`);
+    } catch (feedbackError) {
+      setError(
+        feedbackError instanceof Error
+          ? feedbackError.message
+          : "Feedback failed unexpectedly.",
+      );
+    }
+  }
+
   async function copyText(text: string) {
     await navigator.clipboard.writeText(text);
   }
@@ -580,6 +604,7 @@ export function Dashboard() {
                 <BriefDetail
                   brief={selectedBrief}
                   copyText={copyText}
+                  submitFeedback={submitFeedback}
                   updateStatus={updateStatus}
                 />
               ) : selectedEvent ? (
@@ -647,10 +672,12 @@ export function Dashboard() {
 function BriefDetail({
   brief,
   copyText,
+  submitFeedback,
   updateStatus,
 }: {
   brief: SalesActionBrief;
   copyText: (text: string) => Promise<void>;
+  submitFeedback: (brief: SalesActionBrief, relevant: boolean) => Promise<void>;
   updateStatus: (status: BriefStatus) => Promise<void>;
 }) {
   return (
@@ -719,6 +746,20 @@ function BriefDetail({
             type="button"
           >
             Export brief text
+          </button>
+          <button
+            className="h-10 border border-[#16a34a] px-4 text-sm font-semibold text-[#166534]"
+            onClick={() => submitFeedback(brief, true)}
+            type="button"
+          >
+            Mark relevant
+          </button>
+          <button
+            className="h-10 border border-[#f97316] px-4 text-sm font-semibold text-[#9a3412]"
+            onClick={() => submitFeedback(brief, false)}
+            type="button"
+          >
+            Mark not relevant
           </button>
         </div>
       </div>

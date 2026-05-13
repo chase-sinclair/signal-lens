@@ -28,6 +28,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 SEC_USER_AGENT=SignalLens AI your-email@example.com
+SLACK_WEBHOOK_URL=
 ```
 
 The SEC requires declared automated access. Use a real contact email in `SEC_USER_AGENT`.
@@ -77,4 +78,5 @@ Use **Reprocess** for tuning and debugging recent filings that were already stor
 
 - The demo result button works without credentials and previews the review workflow.
 - The live scan requires Supabase schema/seed, Supabase env vars, OpenAI key, and SEC user agent.
+- Slack notifications are optional. Add `SLACK_WEBHOOK_URL` to send a brief-created summary.
 - `codex.md` is the implementation memory log. It records phase summaries, decisions, problems, verification, and next steps.

@@ -393,3 +393,29 @@ Added the first multi-seller profile catalog and made the seller selector real i
 
 ### Next
 - Generalize backend scan profile loading and seed all seller profiles/modules in Supabase.
+
+## Phase 12 - Notification + Operational Workflow
+
+### Summary
+Added optional Slack notification plumbing and brief feedback capture.
+
+### Decisions
+- Use `SLACK_WEBHOOK_URL` as an optional env var; no notification is sent when it is absent.
+- Send only a compact brief-created summary to Slack.
+- Store relevance feedback in the existing `user_feedback` table.
+
+### Problems
+- Slack delivery is not live-tested because no webhook is configured locally.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- Optional Slack notification helper.
+- Brief feedback API.
+- Dashboard buttons for relevant / not relevant feedback.
+
+### Next
+- Apply phase 8-10 Supabase SQL files, then run end-to-end live browser QA.
