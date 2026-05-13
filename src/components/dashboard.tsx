@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { crowdStrikeProfile } from "@/lib/signal-profile";
+import {
+  crowdStrikeProfile,
+  getSellerProfile,
+  sellerProfiles,
+} from "@/lib/signal-profile";
 import type {
   BriefStatus,
   SalesActionBrief,
@@ -177,6 +181,7 @@ function eventLabel(event: ScanEvent) {
 
 export function Dashboard() {
   const [tickers, setTickers] = useState("MSFT\nOKTA\nCRWD");
+  const [sellerCompany, setSellerCompany] = useState("CrowdStrike");
   const [scanMode, setScanMode] = useState<ScanMode>("new");
   const [result, setResult] = useState<ScanResult>(emptyResult);
   const [selectedBriefId, setSelectedBriefId] = useState<string | null>(null);
@@ -202,6 +207,7 @@ export function Dashboard() {
         .filter(Boolean),
     [tickers],
   );
+  const selectedSellerProfile = getSellerProfile(sellerCompany);
 
   function loadDemo() {
     setResult({
@@ -384,11 +390,19 @@ export function Dashboard() {
             </label>
             <select
               className="mt-2 h-11 w-full border border-[#cbd5e1] bg-white px-3 text-sm font-medium outline-none focus:border-[#2563eb]"
-              value="CrowdStrike"
-              disabled
+              value={sellerCompany}
+              onChange={(event) => setSellerCompany(event.target.value)}
             >
-              <option>CrowdStrike</option>
+              {sellerProfiles.map((profile) => (
+                <option key={profile.companyName}>{profile.companyName}</option>
+              ))}
             </select>
+            {sellerCompany !== "CrowdStrike" ? (
+              <p className="mt-2 text-sm leading-6 text-[#9a3412]">
+                Live SEC scanning is CrowdStrike-only in this slice. Other
+                profiles are ready for fixture/demo and the next backend map.
+              </p>
+            ) : null}
           </section>
 
           <section className="mt-6">
@@ -463,12 +477,14 @@ export function Dashboard() {
           ) : null}
 
           <section className="mt-8 border border-[#d5dae3] bg-white p-4">
-            <h2 className="text-sm font-semibold">CrowdStrike profile</h2>
+            <h2 className="text-sm font-semibold">
+              {selectedSellerProfile.companyName} profile
+            </h2>
             <p className="mt-2 text-sm leading-6 text-[#475569]">
-              {crowdStrikeProfile.productsSummary}
+              {selectedSellerProfile.productsSummary}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {crowdStrikeProfile.modules.map((module) => (
+              {selectedSellerProfile.modules.map((module) => (
                 <span
                   className="border border-[#d5dae3] px-2 py-1 text-xs text-[#334155]"
                   key={module.name}

@@ -367,3 +367,29 @@ Added deterministic demo behavior and explicit signal tuning controls.
 
 ### Next
 - Add more seller profiles and prove the same filing can matter differently by seller.
+
+## Phase 11 - Multi-Seller Expansion
+
+### Summary
+Added the first multi-seller profile catalog and made the seller selector real in the dashboard.
+
+### Decisions
+- Add Datadog, Workday, Snowflake, and ServiceNow profiles with reusable modules.
+- Keep live SEC scanning CrowdStrike-only until backend seller-module mappings are generalized safely.
+- Use the selector to preview profile differences and prepare for seller-aware backend routing.
+
+### Problems
+- Non-CrowdStrike live scans are intentionally gated in this slice.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- Multi-seller TypeScript profile catalog.
+- Real seller selector.
+- Profile-specific module display.
+
+### Next
+- Generalize backend scan profile loading and seed all seller profiles/modules in Supabase.

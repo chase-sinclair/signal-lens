@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { prefilterChunk } from "../src/lib/signal-prefilter";
+import { sellerProfiles } from "../src/lib/signal-profile";
 
 const boilerplate =
   "Cybersecurity risks may affect our business. We rely on information systems and may face cyber threats in the ordinary course of operations.";
@@ -21,3 +22,12 @@ assert.ok(
 );
 
 console.log("signal-prefilter fixtures passed");
+
+assert.ok(
+  sellerProfiles.some((profile) => profile.companyName === "Datadog"),
+  "Datadog profile should be seeded in the seller catalog",
+);
+assert.ok(
+  sellerProfiles.some((profile) => profile.companyName === "Workday"),
+  "Workday profile should be seeded in the seller catalog",
+);
