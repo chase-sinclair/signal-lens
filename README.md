@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SignalLens AI
 
-## Getting Started
+SignalLens AI is a company-aware SEC filing signal agent. The MVP vertical slice lets a user select CrowdStrike, enter target tickers, scan official SEC 8-K filings, suppress weak filings, and generate evidence-backed Sales Action Briefs only when a filing creates a meaningful CrowdStrike sales action.
 
-First, run the development server:
+## Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Supabase/Postgres
+- OpenAI Responses API structured outputs
+- SEC EDGAR public APIs
+
+## Local Setup
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Create `.env.local` from `.env.example`:
+
+```bash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.5
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SEC_USER_AGENT=SignalLens AI your-email@example.com
+```
+
+The SEC requires declared automated access. Use a real contact email in `SEC_USER_AGENT`.
+
+3. Apply Supabase schema and seed:
+
+```bash
+# Run these SQL files in the Supabase SQL editor or via your preferred SQL workflow.
+supabase/schema.sql
+supabase/seed.sql
+```
+
+4. Run the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run build
+npm run test:signals
+```
 
-## Learn More
+## MVP Flow
 
-To learn more about Next.js, take a look at the following resources:
+1. Open the dashboard.
+2. Confirm seller company is CrowdStrike.
+3. Enter target tickers.
+4. Run Scan.
+5. The server resolves tickers to CIKs, fetches recent 8-K filings, parses filing text, runs deterministic prefiltering, classifies candidate chunks with OpenAI, and stores briefs in Supabase.
+6. Review generated briefs, update status, copy outreach angle, or export full brief text.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- The demo result button works without credentials and previews the review workflow.
+- The live scan requires Supabase schema/seed, Supabase env vars, OpenAI key, and SEC user agent.
+- `codex.md` is the implementation memory log. It records phase summaries, decisions, problems, verification, and next steps.

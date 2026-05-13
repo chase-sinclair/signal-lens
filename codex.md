@@ -193,3 +193,30 @@ Connected the dashboard to the real scan API and added persisted brief status up
 
 ### Next
 - Polish setup docs, run final verification, and browser-check the dashboard.
+
+## Phase 7 - Polish + Verification Pass
+
+### Summary
+Added setup documentation and completed final local verification for the MVP vertical slice.
+
+### Decisions
+- Keep README focused on setup, environment variables, schema/seed application, scripts, and the MVP flow.
+- Keep the demo result path because it allows UI review without live credentials.
+
+### Problems
+- Live SEC/OpenAI/Supabase scan was not run because credentials are not present in the local environment.
+- Port 3000 was already serving another local app, so browser verification used `http://localhost:3100`.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+- Browser check passed at `http://localhost:3100`: dashboard loaded, demo result button generated a brief, copy/export controls appeared, and no console errors were reported.
+- Mobile viewport check at 390x844 confirmed core dashboard sections are present with no console errors.
+
+### Built
+- README setup and operating instructions.
+- Final project memory entry.
+
+### Next
+- Provide credentials, apply schema/seed in Supabase, and run a live scan.
