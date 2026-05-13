@@ -2,6 +2,7 @@ import "server-only";
 
 import { htmlToText, chunkFilingText } from "@/lib/filing-parser";
 import { classifyCandidate, generateBrief } from "@/lib/openai";
+import { errorMessage } from "@/lib/errors";
 import { prefilterChunk } from "@/lib/signal-prefilter";
 import { crowdStrikeProfile } from "@/lib/signal-profile";
 import {
@@ -375,9 +376,10 @@ export async function ingestRecent8Ks(tickers: string[]) {
       }
     } catch (error) {
       result.errors.push(
-        `${companyResult.ticker}: ${
-          error instanceof Error ? error.message : "Unknown SEC ingestion error"
-        }`,
+        `${companyResult.ticker}: ${errorMessage(
+          error,
+          "Unknown SEC ingestion error",
+        )}`,
       );
     }
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { errorMessage } from "@/lib/errors";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 const statusSchema = z.object({
@@ -32,10 +33,7 @@ export async function PATCH(
   } catch (error) {
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Brief status update failed unexpectedly.",
+        error: errorMessage(error, "Brief status update failed unexpectedly."),
       },
       { status: 500 },
     );

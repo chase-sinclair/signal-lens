@@ -238,3 +238,25 @@ Added a local `.env` file with placeholder values for OpenAI, Supabase, and SEC 
 
 ### Built
 - Local `.env` placeholder file.
+
+## Live Scan Debugging
+
+### Summary
+Improved API error formatting after the first live scan returned an unhelpful generic failure.
+
+### Decisions
+- Add a shared safe error formatter for route handlers and ingestion errors.
+- Preserve Supabase diagnostic fields such as `message`, `details`, `hint`, and `code` without exposing secrets.
+
+### Problems
+- Live scan reached Supabase but failed with `Could not find the table 'public.seller_companies' in the schema cache PGRST205`.
+- This indicates the schema/seed SQL has not been applied to the Supabase project referenced by `.env`, or the `.env` keys point to a different project.
+
+### Verification
+- `npm run lint` passed.
+- `npm run build` passed.
+- Re-running `POST /api/scan` now returns the actionable Supabase schema error.
+
+### Built
+- Shared error formatter.
+- Clearer `/api/scan` and brief status API errors.

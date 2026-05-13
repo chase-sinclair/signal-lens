@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { errorMessage } from "@/lib/errors";
 import { ingestRecent8Ks } from "@/lib/scan/ingest";
 
 const scanRequestSchema = z.object({
@@ -24,10 +25,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "SignalLens scan failed unexpectedly.",
+        error: errorMessage(error, "SignalLens scan failed unexpectedly."),
       },
       { status: 500 },
     );
