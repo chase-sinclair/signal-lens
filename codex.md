@@ -51,3 +51,30 @@ Added the database contract and server-only integration layer for the CrowdStrik
 
 ### Next
 - Build the dashboard workflow UI against local/server-provided data.
+
+## Phase 2 - Dashboard Workflow UI
+
+### Summary
+Built the first operational SignalLens dashboard surface with local scan state and the review workflow.
+
+### Decisions
+- Implement the dashboard as a focused client component because ticker editing, selected brief state, copy actions, and status changes are interactive.
+- Use a demo scan button for this phase so the UI can be reviewed before SEC and OpenAI plumbing is attached.
+- Keep card radii at zero and use a restrained operations-console visual style.
+
+### Problems
+- Live scan execution is intentionally not connected in this phase.
+
+### Verification
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- Seller profile panel.
+- Target ticker textarea.
+- Scan summary metrics.
+- Brief list and detail panel.
+- Status changes, copy outreach angle, and export full brief text.
+
+### Next
+- Add SEC ticker resolution, 8-K fetching, document parsing, and persistence.
