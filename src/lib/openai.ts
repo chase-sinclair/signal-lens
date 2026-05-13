@@ -129,12 +129,27 @@ async function structuredResponse<T>(input: string, schemaName: string, schema: 
     throw new Error(`OpenAI request failed: ${response.status} ${text}`);
   }
 
-  const data = (await response.json()) as { output_text?: string };
-  if (!data.output_text) {
+  const data = (await response.json()) as {
+    output_text?: string;
+    output?: Array<{
+      content?: Array<{
+        type?: string;
+        text?: string;
+      }>;
+    }>;
+  };
+
+  const outputText =
+    data.output_text ??
+    data.output
+      ?.flatMap((item) => item.content ?? [])
+      .find((content) => content.type === "output_text" && content.text)?.text;
+
+  if (!outputText) {
     throw new Error("OpenAI response did not include structured output text.");
   }
 
-  return JSON.parse(data.output_text) as T;
+  return JSON.parse(outputText) as T;
 }
 
 function profilePrompt(module: SignalModule) {

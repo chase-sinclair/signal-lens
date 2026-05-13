@@ -260,3 +260,23 @@ Improved API error formatting after the first live scan returned an unhelpful ge
 ### Built
 - Shared error formatter.
 - Clearer `/api/scan` and brief status API errors.
+
+## OpenAI Response Parsing Fix
+
+### Summary
+Fixed OpenAI structured output parsing after `gpt-4o-mini` returned structured text in the Responses API `output[].content[]` shape instead of the convenience `output_text` field.
+
+### Decisions
+- Keep using Responses API strict JSON schema outputs.
+- Parse both `output_text` and nested `output_text` content for compatibility.
+
+### Problems
+- OKTA scan found one candidate, then failed with `OpenAI response did not include structured output text`.
+
+### Verification
+- `npm run lint` passed.
+- `npm run build` passed.
+- Live retry pending.
+
+### Built
+- More robust OpenAI response extraction.
