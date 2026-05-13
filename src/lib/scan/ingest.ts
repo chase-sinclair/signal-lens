@@ -1,6 +1,7 @@
 import "server-only";
 
 import { htmlToText, chunkFilingText } from "@/lib/filing-parser";
+import { prefilterChunk } from "@/lib/signal-prefilter";
 import {
   fetchFilingText,
   fetchRecent8Ks,
@@ -127,6 +128,39 @@ async function persistChunk(filingId: string, chunk: IngestedChunk) {
   return data.id as string;
 }
 
+async function moduleIdsByName() {
+  const supabase = getSupabaseServiceClient();
+  const { data, error } = await supabase.from("signal_modules").select("id,name");
+  if (error) throw error;
+
+  return new Map(
+    (data ?? []).map((module) => [module.name as string, module.id as string]),
+  );
+}
+
+async function persistCandidate(input: {
+  scanRunId: string;
+  filingId: string;
+  chunkId: string;
+  sellerCompanyId: string;
+  signalModuleId: string | null;
+  keywordMatches: string[];
+  rationale: string;
+}) {
+  const supabase = getSupabaseServiceClient();
+  const { error } = await supabase.from("signal_candidates").insert({
+    scan_run_id: input.scanRunId,
+    filing_id: input.filingId,
+    chunk_id: input.chunkId,
+    seller_company_id: input.sellerCompanyId,
+    signal_module_id: input.signalModuleId,
+    prefilter_keyword_matches: input.keywordMatches,
+    rationale: input.rationale,
+  });
+
+  if (error) throw error;
+}
+
 export async function ingestRecent8Ks(tickers: string[]) {
   const normalizedTickers = normalizeTickers(tickers);
   const result: IngestionResult = {
@@ -143,6 +177,7 @@ export async function ingestRecent8Ks(tickers: string[]) {
 
   const sellerCompanyId = await getCrowdStrikeSellerId();
   const supabase = getSupabaseServiceClient();
+  const moduleIds = await moduleIdsByName();
   const { data: scanRun, error: scanRunError } = await supabase
     .from("scan_runs")
     .insert({
@@ -201,6 +236,23 @@ export async function ingestRecent8Ks(tickers: string[]) {
           };
           ingestedChunk.id = await persistChunk(filingId, ingestedChunk);
           result.chunks.push(ingestedChunk);
+
+          const prefilterMatches = prefilterChunk(ingestedChunk.text).filter(
+            (match) => !match.isBoilerplate,
+          );
+
+          for (const match of prefilterMatches) {
+            await persistCandidate({
+              scanRunId: result.scanRunId,
+              filingId,
+              chunkId: ingestedChunk.id,
+              sellerCompanyId,
+              signalModuleId: moduleIds.get(match.moduleName) ?? null,
+              keywordMatches: match.keywordMatches,
+              rationale: match.rationale,
+            });
+            result.summary.candidatesFound += 1;
+          }
         }
       }
     } catch (error) {

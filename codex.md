@@ -108,3 +108,32 @@ Added the server-side SEC ingestion path for resolving tickers, fetching recent 
 
 ### Next
 - Add keyword prefiltering, boilerplate suppression, candidate persistence, and fixtures.
+
+## Phase 4 - Keyword Prefilter + Suppression
+
+### Summary
+Added deterministic signal filtering so the system creates candidates only when filing chunks match CrowdStrike signal modules and are not boilerplate-only risk language.
+
+### Decisions
+- Keep prefiltering pure and testable in `src/lib/signal-prefilter.ts`.
+- Suppress generic risk-factor language even when it contains cyber keywords.
+- Persist one signal candidate per non-boilerplate module match.
+
+### Problems
+- Prefiltering is intentionally conservative; some subtle but real cyber governance signals may wait for later tuning.
+- Initial fixture showed boilerplate phrases were not keyword-detectable, so weak-risk phrases were added to the keyword set and then suppressed by the boilerplate classifier.
+
+### Verification
+- Added `npm run test:signals` fixture check for boilerplate suppression and concrete breach detection.
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- CrowdStrike keyword prefilter.
+- Boilerplate classifier.
+- Candidate persistence during ingestion.
+- Signal fixture test script.
+
+### Next
+- Add OpenAI structured classification and brief generation for persisted candidates.

@@ -51,6 +51,8 @@ export const crowdStrikeProfile: SellerProfile = {
         "incident response",
         "remediation",
         "information security",
+        "cybersecurity risks",
+        "cyber threats",
       ],
       strongTriggerExamples: [
         "We experienced unauthorized access to customer data.",
@@ -78,6 +80,7 @@ export const crowdStrikeProfile: SellerProfile = {
         "security controls",
         "internal control",
         "governance",
+        "risk management",
       ],
       strongTriggerExamples: [
         "We identified a material weakness related to information security controls.",
@@ -103,6 +106,7 @@ export const crowdStrikeProfile: SellerProfile = {
         "authentication",
         "unauthorized user",
         "permissions",
+        "unauthorized access",
       ],
       strongTriggerExamples: [
         "Compromised credentials enabled unauthorized access.",
