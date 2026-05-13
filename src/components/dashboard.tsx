@@ -96,6 +96,8 @@ export function Dashboard() {
   const [result, setResult] = useState<ScanResult>(emptyResult);
   const [selectedBriefId, setSelectedBriefId] = useState<string | null>(null);
   const [isDemoLoaded, setIsDemoLoaded] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const selectedBrief =
     result.briefs.find((brief) => brief.id === selectedBriefId) ??
@@ -127,7 +129,41 @@ export function Dashboard() {
     setIsDemoLoaded(true);
   }
 
-  function updateStatus(status: BriefStatus) {
+  async function runScan() {
+    setIsScanning(true);
+    setError(null);
+    setIsDemoLoaded(false);
+
+    try {
+      const response = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: normalizedTickers }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Scan failed.");
+      }
+
+      const nextResult = data as ScanResult;
+      setResult(nextResult);
+      setSelectedBriefId(nextResult.briefs[0]?.id ?? null);
+      if (nextResult.errors.length > 0) {
+        setError(nextResult.errors.join(" "));
+      }
+    } catch (scanError) {
+      setError(
+        scanError instanceof Error
+          ? scanError.message
+          : "Scan failed unexpectedly.",
+      );
+    } finally {
+      setIsScanning(false);
+    }
+  }
+
+  async function updateStatus(status: BriefStatus) {
     if (!selectedBrief) return;
     setResult((current) => ({
       ...current,
@@ -135,6 +171,27 @@ export function Dashboard() {
         brief.id === selectedBrief.id ? { ...brief, status } : brief,
       ),
     }));
+
+    if (selectedBrief.id.startsWith("demo-")) return;
+
+    try {
+      const response = await fetch(`/api/briefs/${selectedBrief.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? "Status update failed.");
+      }
+    } catch (statusError) {
+      setError(
+        statusError instanceof Error
+          ? statusError.message
+          : "Status update failed unexpectedly.",
+      );
+    }
   }
 
   async function copyText(text: string) {
@@ -185,11 +242,25 @@ export function Dashboard() {
 
           <button
             className="mt-6 h-11 w-full bg-[#111827] px-4 text-sm font-semibold text-white transition hover:bg-[#273244]"
+            disabled={isScanning || normalizedTickers.length === 0}
+            onClick={runScan}
+            type="button"
+          >
+            {isScanning ? "Scanning SEC filings..." : "Run Scan"}
+          </button>
+          <button
+            className="mt-3 h-10 w-full border border-[#cbd5e1] bg-white px-4 text-sm font-semibold text-[#334155] transition hover:bg-[#f1f5f9]"
             onClick={loadDemo}
             type="button"
           >
-            {isDemoLoaded ? "Demo scan loaded" : "Run Scan"}
+            {isDemoLoaded ? "Demo scan loaded" : "Load demo result"}
           </button>
+
+          {error ? (
+            <div className="mt-4 border border-[#fecaca] bg-[#fff1f2] p-3 text-sm leading-6 text-[#9f1239]">
+              {error}
+            </div>
+          ) : null}
 
           <section className="mt-8 border border-[#d5dae3] bg-white p-4">
             <h2 className="text-sm font-semibold">CrowdStrike profile</h2>
@@ -239,9 +310,8 @@ export function Dashboard() {
 
               {result.briefs.length === 0 ? (
                 <div className="p-6 text-sm leading-6 text-[#64748b]">
-                  No scan results yet. Run the demo scan to preview the review
-                  workflow; later phases connect this to live SEC and OpenAI
-                  processing.
+                  No scan results yet. Run a scan to fetch live SEC 8-K filings,
+                  or load the demo result to preview the review workflow.
                 </div>
               ) : (
                 <div className="divide-y divide-[#e2e8f0]">

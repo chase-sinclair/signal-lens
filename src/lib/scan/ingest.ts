@@ -11,6 +11,7 @@ import {
   type SecResolvedCompany,
 } from "@/lib/sec";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
+import type { SalesActionBrief } from "@/lib/types";
 
 export type IngestedChunk = {
   id?: string;
@@ -33,6 +34,7 @@ export type IngestedChunk = {
 export type IngestionResult = {
   scanRunId: string | null;
   chunks: IngestedChunk[];
+  briefs: SalesActionBrief[];
   errors: string[];
   summary: {
     filingsScanned: number;
@@ -195,26 +197,31 @@ async function persistBrief(input: {
   brief: Awaited<ReturnType<typeof generateBrief>>;
 }) {
   const supabase = getSupabaseServiceClient();
-  const { error } = await supabase.from("briefs").insert({
-    scan_run_id: input.scanRunId,
-    seller_company_id: input.sellerCompanyId,
-    target_company_id: input.targetCompanyId,
-    filing_id: input.filingId,
-    title: input.brief.title,
-    trigger_type: input.brief.triggerType,
-    urgency: input.brief.urgency,
-    confidence_score: input.brief.confidenceScore,
-    evidence_snippet: input.brief.evidenceSnippet,
-    why_it_matters: input.brief.whyItMatters,
-    buyer_personas: input.brief.buyerPersonas,
-    suggested_sales_motion: input.brief.suggestedSalesMotion,
-    suggested_outreach_angle: input.brief.suggestedOutreachAngle,
-    outreach_sensitivity: input.brief.outreachSensitivity,
-    recommended_next_step: input.brief.recommendedNextStep,
-    why_flagged: input.brief.whyFlagged,
-  });
+  const { data, error } = await supabase
+    .from("briefs")
+    .insert({
+      scan_run_id: input.scanRunId,
+      seller_company_id: input.sellerCompanyId,
+      target_company_id: input.targetCompanyId,
+      filing_id: input.filingId,
+      title: input.brief.title,
+      trigger_type: input.brief.triggerType,
+      urgency: input.brief.urgency,
+      confidence_score: input.brief.confidenceScore,
+      evidence_snippet: input.brief.evidenceSnippet,
+      why_it_matters: input.brief.whyItMatters,
+      buyer_personas: input.brief.buyerPersonas,
+      suggested_sales_motion: input.brief.suggestedSalesMotion,
+      suggested_outreach_angle: input.brief.suggestedOutreachAngle,
+      outreach_sensitivity: input.brief.outreachSensitivity,
+      recommended_next_step: input.brief.recommendedNextStep,
+      why_flagged: input.brief.whyFlagged,
+    })
+    .select("id,status")
+    .single();
 
   if (error) throw error;
+  return data as { id: string; status: SalesActionBrief["status"] };
 }
 
 export async function ingestRecent8Ks(tickers: string[]) {
@@ -222,6 +229,7 @@ export async function ingestRecent8Ks(tickers: string[]) {
   const result: IngestionResult = {
     scanRunId: null,
     chunks: [],
+    briefs: [],
     errors: [],
     summary: {
       filingsScanned: 0,
@@ -344,7 +352,7 @@ export async function ingestRecent8Ks(tickers: string[]) {
                 chunkText: ingestedChunk.text,
               });
 
-              await persistBrief({
+              const persistedBrief = await persistBrief({
                 scanRunId: result.scanRunId,
                 sellerCompanyId,
                 targetCompanyId,
@@ -352,6 +360,15 @@ export async function ingestRecent8Ks(tickers: string[]) {
                 brief,
               });
               result.summary.briefsGenerated += 1;
+              result.briefs.push({
+                id: persistedBrief.id,
+                status: persistedBrief.status,
+                sellerCompany: "CrowdStrike",
+                targetCompany: ingestedChunk.targetCompanyName,
+                ticker: ingestedChunk.ticker,
+                filingUrl: ingestedChunk.secUrl,
+                ...brief,
+              });
             }
           }
         }

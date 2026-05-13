@@ -166,3 +166,30 @@ Added the required OpenAI structured-output path. Candidate chunks now go throug
 
 ### Next
 - Connect the dashboard to the real scan route and load persisted briefs into the review workflow.
+
+## Phase 6 - End-to-End Review Workflow
+
+### Summary
+Connected the dashboard to the real scan API and added persisted brief status updates.
+
+### Decisions
+- Keep the demo result available as a separate preview button so the UI remains inspectable without credentials.
+- Make `Run Scan` call the live `/api/scan` route.
+- Optimistically update brief status in the UI, then persist through `/api/briefs/[id]/status`.
+
+### Problems
+- Live end-to-end scan still requires Supabase, OpenAI, and SEC user-agent environment variables.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+
+### Built
+- Live scan button integration.
+- Loading and error states.
+- Real generated briefs returned from the scan route.
+- Persisted status update API route.
+
+### Next
+- Polish setup docs, run final verification, and browser-check the dashboard.
