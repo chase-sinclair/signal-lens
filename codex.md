@@ -280,3 +280,33 @@ Fixed OpenAI structured output parsing after `gpt-4o-mini` returned structured t
 
 ### Built
 - More robust OpenAI response extraction.
+
+## Phase 8 - Filing Freshness + Scan Transparency
+
+### Summary
+Added the monitoring trust layer: scans now distinguish new filings from already-seen filings and return durable scan events explaining every skip, suppression, candidate, rejection, and generated brief.
+
+### Decisions
+- Default scan mode is `new`, which skips filings already stored for a target company.
+- Add `reprocess` mode for debugging and demos.
+- Persist scan log entries in a new `scan_events` table.
+- Keep `filingsScanned` as the number of SEC 8-Ks inspected and add explicit `newFilingsProcessed` and `filingsSkipped` counters.
+
+### Problems
+- Existing Supabase projects need to run `supabase/phase8_scan_events.sql` before using the new scan log fields.
+
+### Verification
+- `npm run test:signals` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+- Live smoke check is pending until `supabase/phase8_scan_events.sql` is applied to the Supabase project.
+
+### Built
+- Scan event types and summary fields.
+- Schema extension for scan mode, skipped count, and scan events.
+- `new` versus `reprocess` scan mode in the API and dashboard.
+- Dashboard scan log with event detail view.
+- Better empty states explaining no new filings, below-threshold candidates, and non-actionable scans.
+
+### Next
+- Apply `supabase/phase8_scan_events.sql`, then live-test new-only skip behavior and reprocess mode.

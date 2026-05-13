@@ -1,8 +1,8 @@
 import "server-only";
 
+import { errorMessage } from "@/lib/errors";
 import { htmlToText, chunkFilingText } from "@/lib/filing-parser";
 import { classifyCandidate, generateBrief } from "@/lib/openai";
-import { errorMessage } from "@/lib/errors";
 import { prefilterChunk } from "@/lib/signal-prefilter";
 import { crowdStrikeProfile } from "@/lib/signal-profile";
 import {
@@ -12,7 +12,7 @@ import {
   type SecResolvedCompany,
 } from "@/lib/sec";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
-import type { SalesActionBrief } from "@/lib/types";
+import type { SalesActionBrief, ScanEvent, ScanMode } from "@/lib/types";
 
 export type IngestedChunk = {
   id?: string;
@@ -34,11 +34,15 @@ export type IngestedChunk = {
 
 export type IngestionResult = {
   scanRunId: string | null;
+  mode: ScanMode;
   chunks: IngestedChunk[];
   briefs: SalesActionBrief[];
+  events: ScanEvent[];
   errors: string[];
   summary: {
     filingsScanned: number;
+    newFilingsProcessed: number;
+    filingsSkipped: number;
     candidatesFound: number;
     briefsGenerated: number;
     filingsSuppressed: number;
@@ -72,11 +76,7 @@ async function persistTarget(company: SecResolvedCompany) {
   const { data, error } = await supabase
     .from("target_companies")
     .upsert(
-      {
-        ticker: company.ticker,
-        cik: company.cik,
-        name: company.name,
-      },
+      { ticker: company.ticker, cik: company.cik, name: company.name },
       { onConflict: "ticker" },
     )
     .select("id")
@@ -86,9 +86,28 @@ async function persistTarget(company: SecResolvedCompany) {
   return data.id as string;
 }
 
+async function findExistingFilingId(
+  targetCompanyId: string,
+  accessionNumber: string,
+) {
+  const supabase = getSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("filings")
+    .select("id")
+    .eq("target_company_id", targetCompanyId)
+    .eq("accession_number", accessionNumber)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data?.id as string | undefined) ?? null;
+}
+
 async function persistFiling(
   targetCompanyId: string,
-  chunk: Omit<IngestedChunk, "chunkIndex" | "sectionLabel" | "text" | "sourceUrl">,
+  filing: Omit<
+    IngestedChunk,
+    "chunkIndex" | "sectionLabel" | "text" | "sourceUrl"
+  >,
 ) {
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
@@ -96,12 +115,12 @@ async function persistFiling(
     .upsert(
       {
         target_company_id: targetCompanyId,
-        accession_number: chunk.accessionNumber,
-        filing_type: chunk.filingType,
-        filing_date: chunk.filingDate,
-        report_date: chunk.reportDate,
-        sec_url: chunk.secUrl,
-        primary_document_url: chunk.primaryDocumentUrl,
+        accession_number: filing.accessionNumber,
+        filing_type: filing.filingType,
+        filing_date: filing.filingDate,
+        report_date: filing.reportDate,
+        sec_url: filing.secUrl,
+        primary_document_url: filing.primaryDocumentUrl,
       },
       { onConflict: "target_company_id,accession_number" },
     )
@@ -225,15 +244,44 @@ async function persistBrief(input: {
   return data as { id: string; status: SalesActionBrief["status"] };
 }
 
-export async function ingestRecent8Ks(tickers: string[]) {
+async function persistScanEvent(scanRunId: string, event: ScanEvent) {
+  const supabase = getSupabaseServiceClient();
+  const { error } = await supabase.from("scan_events").insert({
+    scan_run_id: scanRunId,
+    event_type: event.type,
+    ticker: event.ticker ?? null,
+    target_company: event.targetCompany ?? null,
+    accession_number: event.accessionNumber ?? null,
+    filing_date: event.filingDate ?? null,
+    filing_url: event.filingUrl ?? null,
+    section_label: event.sectionLabel ?? null,
+    signal_module: event.signalModule ?? null,
+    keyword_matches: event.keywordMatches ?? [],
+    classification: event.classification ?? null,
+    confidence: event.confidence ?? null,
+    rationale: event.rationale,
+  });
+
+  if (error) throw error;
+}
+
+export async function ingestRecent8Ks(
+  tickers: string[],
+  options: { mode?: ScanMode } = {},
+) {
+  const mode = options.mode ?? "new";
   const normalizedTickers = normalizeTickers(tickers);
   const result: IngestionResult = {
     scanRunId: null,
+    mode,
     chunks: [],
     briefs: [],
+    events: [],
     errors: [],
     summary: {
       filingsScanned: 0,
+      newFilingsProcessed: 0,
+      filingsSkipped: 0,
       candidatesFound: 0,
       briefsGenerated: 0,
       filingsSuppressed: 0,
@@ -248,6 +296,7 @@ export async function ingestRecent8Ks(tickers: string[]) {
     .insert({
       seller_company_id: sellerCompanyId,
       run_type: "manual",
+      scan_mode: mode,
       status: "running",
     })
     .select("id")
@@ -256,11 +305,21 @@ export async function ingestRecent8Ks(tickers: string[]) {
   if (scanRunError) throw scanRunError;
   result.scanRunId = scanRun.id as string;
 
+  async function logEvent(event: ScanEvent) {
+    result.events.push(event);
+    await persistScanEvent(result.scanRunId as string, event);
+  }
+
   const resolved = await resolveTickers(normalizedTickers);
 
   for (const companyResult of resolved) {
     if ("error" in companyResult) {
       result.errors.push(companyResult.error);
+      await logEvent({
+        type: "scan_error",
+        ticker: companyResult.ticker,
+        rationale: companyResult.error,
+      });
       continue;
     }
 
@@ -270,6 +329,40 @@ export async function ingestRecent8Ks(tickers: string[]) {
 
       for (const filing of filings) {
         result.summary.filingsScanned += 1;
+        const existingFilingId = await findExistingFilingId(
+          targetCompanyId,
+          filing.accessionNumber,
+        );
+
+        if (existingFilingId && mode === "new") {
+          result.summary.filingsSkipped += 1;
+          await logEvent({
+            type: "filing_skipped",
+            ticker: companyResult.ticker,
+            targetCompany: companyResult.name,
+            accessionNumber: filing.accessionNumber,
+            filingDate: filing.filingDate,
+            filingUrl: filing.secUrl,
+            rationale:
+              "Already-seen filing skipped. SignalLens processes new filings by default.",
+          });
+          continue;
+        }
+
+        result.summary.newFilingsProcessed += 1;
+        await logEvent({
+          type: "filing_processed",
+          ticker: companyResult.ticker,
+          targetCompany: companyResult.name,
+          accessionNumber: filing.accessionNumber,
+          filingDate: filing.filingDate,
+          filingUrl: filing.secUrl,
+          rationale:
+            mode === "reprocess"
+              ? "Recent filing reprocessed by manual override."
+              : "New filing detected and processed.",
+        });
+
         const html = await fetchFilingText(filing);
         const text = htmlToText(html);
         const chunks = chunkFilingText(text, filing.primaryDocumentUrl);
@@ -302,9 +395,25 @@ export async function ingestRecent8Ks(tickers: string[]) {
           ingestedChunk.id = await persistChunk(filingId, ingestedChunk);
           result.chunks.push(ingestedChunk);
 
-          const prefilterMatches = prefilterChunk(ingestedChunk.text).filter(
+          const allMatches = prefilterChunk(ingestedChunk.text);
+          const prefilterMatches = allMatches.filter(
             (match) => !match.isBoilerplate,
           );
+
+          for (const match of allMatches.filter((item) => item.isBoilerplate)) {
+            await logEvent({
+              type: "filing_suppressed",
+              ticker: ingestedChunk.ticker,
+              targetCompany: ingestedChunk.targetCompanyName,
+              accessionNumber: ingestedChunk.accessionNumber,
+              filingDate: ingestedChunk.filingDate,
+              filingUrl: ingestedChunk.secUrl,
+              sectionLabel: ingestedChunk.sectionLabel,
+              signalModule: match.moduleName,
+              keywordMatches: match.keywordMatches,
+              rationale: match.rationale,
+            });
+          }
 
           for (const match of prefilterMatches) {
             const candidateId = await persistCandidate({
@@ -317,11 +426,22 @@ export async function ingestRecent8Ks(tickers: string[]) {
               rationale: match.rationale,
             });
             result.summary.candidatesFound += 1;
+            await logEvent({
+              type: "candidate_found",
+              ticker: ingestedChunk.ticker,
+              targetCompany: ingestedChunk.targetCompanyName,
+              accessionNumber: ingestedChunk.accessionNumber,
+              filingDate: ingestedChunk.filingDate,
+              filingUrl: ingestedChunk.secUrl,
+              sectionLabel: ingestedChunk.sectionLabel,
+              signalModule: match.moduleName,
+              keywordMatches: match.keywordMatches,
+              rationale: match.rationale,
+            });
 
             const signalModule = crowdStrikeProfile.modules.find(
               (item) => item.name === match.moduleName,
             );
-
             if (!signalModule) continue;
 
             const classification = await classifyCandidate({
@@ -370,23 +490,60 @@ export async function ingestRecent8Ks(tickers: string[]) {
                 filingUrl: ingestedChunk.secUrl,
                 ...brief,
               });
+              await logEvent({
+                type: "brief_generated",
+                ticker: ingestedChunk.ticker,
+                targetCompany: ingestedChunk.targetCompanyName,
+                accessionNumber: ingestedChunk.accessionNumber,
+                filingDate: ingestedChunk.filingDate,
+                filingUrl: ingestedChunk.secUrl,
+                sectionLabel: ingestedChunk.sectionLabel,
+                signalModule: match.moduleName,
+                keywordMatches: match.keywordMatches,
+                classification: classification.classification,
+                confidence: classification.confidence,
+                rationale:
+                  "Candidate met the action threshold and generated a Sales Action Brief.",
+              });
+            } else {
+              await logEvent({
+                type: "candidate_rejected",
+                ticker: ingestedChunk.ticker,
+                targetCompany: ingestedChunk.targetCompanyName,
+                accessionNumber: ingestedChunk.accessionNumber,
+                filingDate: ingestedChunk.filingDate,
+                filingUrl: ingestedChunk.secUrl,
+                sectionLabel: ingestedChunk.sectionLabel,
+                signalModule: match.moduleName,
+                keywordMatches: match.keywordMatches,
+                classification: classification.classification,
+                confidence: classification.confidence,
+                rationale:
+                  classification.rationale ||
+                  "Candidate did not meet the actionable/high-urgency brief threshold.",
+              });
             }
           }
         }
       }
     } catch (error) {
-      result.errors.push(
-        `${companyResult.ticker}: ${errorMessage(
-          error,
-          "Unknown SEC ingestion error",
-        )}`,
-      );
+      const message = `${companyResult.ticker}: ${errorMessage(
+        error,
+        "Unknown SEC ingestion error",
+      )}`;
+      result.errors.push(message);
+      await logEvent({
+        type: "scan_error",
+        ticker: companyResult.ticker,
+        targetCompany: companyResult.name,
+        rationale: message,
+      });
     }
   }
 
   result.summary.filingsSuppressed = Math.max(
     0,
-    result.summary.filingsScanned - result.summary.candidatesFound,
+    result.summary.newFilingsProcessed - result.summary.candidatesFound,
   );
 
   await supabase
@@ -395,6 +552,7 @@ export async function ingestRecent8Ks(tickers: string[]) {
       completed_at: new Date().toISOString(),
       status: result.errors.length > 0 ? "completed_with_errors" : "completed",
       total_filings_scanned: result.summary.filingsScanned,
+      total_filings_skipped: result.summary.filingsSkipped,
       total_candidates: result.summary.candidatesFound,
       total_briefs_generated: result.summary.briefsGenerated,
       total_filings_suppressed: result.summary.filingsSuppressed,

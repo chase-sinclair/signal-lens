@@ -7,9 +7,36 @@ export type BriefStatus =
 
 export type ScanSummary = {
   filingsScanned: number;
+  newFilingsProcessed: number;
+  filingsSkipped: number;
   candidatesFound: number;
   briefsGenerated: number;
   filingsSuppressed: number;
+};
+
+export type ScanMode = "new" | "reprocess";
+
+export type ScanEvent = {
+  id?: string;
+  type:
+    | "filing_processed"
+    | "filing_skipped"
+    | "filing_suppressed"
+    | "candidate_found"
+    | "candidate_rejected"
+    | "brief_generated"
+    | "scan_error";
+  ticker?: string;
+  targetCompany?: string;
+  accessionNumber?: string;
+  filingDate?: string;
+  filingUrl?: string;
+  sectionLabel?: string;
+  signalModule?: string;
+  keywordMatches?: string[];
+  classification?: string;
+  confidence?: number;
+  rationale: string;
 };
 
 export type SalesActionBrief = {
@@ -37,7 +64,9 @@ export type SalesActionBrief = {
 
 export type ScanResult = {
   scanRunId: string;
+  mode?: ScanMode;
   summary: ScanSummary;
   briefs: SalesActionBrief[];
+  events: ScanEvent[];
   errors: string[];
 };

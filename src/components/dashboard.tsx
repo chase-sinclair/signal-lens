@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { crowdStrikeProfile } from "@/lib/signal-profile";
-import type { BriefStatus, SalesActionBrief, ScanResult } from "@/lib/types";
+import type {
+  BriefStatus,
+  SalesActionBrief,
+  ScanEvent,
+  ScanMode,
+  ScanResult,
+} from "@/lib/types";
 
 const statusOptions: BriefStatus[] = [
   "New",
@@ -14,13 +20,17 @@ const statusOptions: BriefStatus[] = [
 
 const emptyResult: ScanResult = {
   scanRunId: "not-run",
+  mode: "new",
   summary: {
     filingsScanned: 0,
+    newFilingsProcessed: 0,
+    filingsSkipped: 0,
     candidatesFound: 0,
     briefsGenerated: 0,
     filingsSuppressed: 0,
   },
   briefs: [],
+  events: [],
   errors: [],
 };
 
@@ -53,6 +63,36 @@ const mockBrief: SalesActionBrief = {
     "Matched CrowdStrike profile under Cybersecurity Incident because the filing described unauthorized access and customer data exposure.",
   status: "New",
 };
+
+const mockEvents: ScanEvent[] = [
+  {
+    type: "filing_processed",
+    ticker: "EXMPL",
+    targetCompany: "Example Corp",
+    accessionNumber: "0000000000-26-000001",
+    filingDate: "YYYY-MM-DD",
+    rationale: "New filing detected and processed.",
+  },
+  {
+    type: "candidate_found",
+    ticker: "EXMPL",
+    targetCompany: "Example Corp",
+    signalModule: "Cybersecurity Incident",
+    keywordMatches: ["unauthorized access", "customer data"],
+    rationale:
+      "Matched CrowdStrike keywords with concrete filing language.",
+  },
+  {
+    type: "brief_generated",
+    ticker: "EXMPL",
+    targetCompany: "Example Corp",
+    signalModule: "Cybersecurity Incident",
+    classification: "High-Urgency Signal",
+    confidence: 0.91,
+    rationale:
+      "Candidate met the action threshold and generated a Sales Action Brief.",
+  },
+];
 
 function briefToText(brief: SalesActionBrief) {
   return `Sales Action Brief
@@ -91,10 +131,48 @@ ${brief.whyFlagged}
 `;
 }
 
+function postScanMessage(result: ScanResult) {
+  if (result.scanRunId === "not-run") {
+    return "No scan results yet. Run a scan to check new SEC 8-K filings, or load the demo result to preview the review workflow.";
+  }
+
+  if (result.summary.filingsSkipped > 0 && result.summary.newFilingsProcessed === 0) {
+    return "No new filings found. Already-seen filings were skipped because SignalLens processes new filings by default.";
+  }
+
+  if (result.summary.candidatesFound > 0) {
+    return "New filings were reviewed. Candidates were classified below the brief threshold; inspect the scan log for rationale.";
+  }
+
+  if (result.summary.newFilingsProcessed > 0) {
+    return "New filings were reviewed, but no seller-relevant candidates were found.";
+  }
+
+  return "No actionable briefs generated for this scan.";
+}
+
+function eventLabel(event: ScanEvent) {
+  const labels: Record<ScanEvent["type"], string> = {
+    filing_processed: "Processed",
+    filing_skipped: "Skipped",
+    filing_suppressed: "Suppressed",
+    candidate_found: "Candidate",
+    candidate_rejected: "Rejected",
+    brief_generated: "Brief",
+    scan_error: "Error",
+  };
+
+  return labels[event.type];
+}
+
 export function Dashboard() {
   const [tickers, setTickers] = useState("MSFT\nOKTA\nCRWD");
+  const [scanMode, setScanMode] = useState<ScanMode>("new");
   const [result, setResult] = useState<ScanResult>(emptyResult);
   const [selectedBriefId, setSelectedBriefId] = useState<string | null>(null);
+  const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(
+    null,
+  );
   const [isDemoLoaded, setIsDemoLoaded] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +181,8 @@ export function Dashboard() {
     result.briefs.find((brief) => brief.id === selectedBriefId) ??
     result.briefs[0] ??
     null;
+  const selectedEvent =
+    selectedEventIndex === null ? null : result.events[selectedEventIndex] ?? null;
 
   const normalizedTickers = useMemo(
     () =>
@@ -116,16 +196,21 @@ export function Dashboard() {
   function loadDemo() {
     setResult({
       scanRunId: "demo-run",
+      mode: "reprocess",
       summary: {
         filingsScanned: 8,
+        newFilingsProcessed: 8,
+        filingsSkipped: 0,
         candidatesFound: 2,
         briefsGenerated: 1,
-        filingsSuppressed: 7,
+        filingsSuppressed: 6,
       },
       briefs: [mockBrief],
+      events: mockEvents,
       errors: [],
     });
     setSelectedBriefId(mockBrief.id);
+    setSelectedEventIndex(2);
     setIsDemoLoaded(true);
   }
 
@@ -138,20 +223,17 @@ export function Dashboard() {
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickers: normalizedTickers }),
+        body: JSON.stringify({ tickers: normalizedTickers, mode: scanMode }),
       });
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error ?? "Scan failed.");
-      }
+      if (!response.ok) throw new Error(data.error ?? "Scan failed.");
 
       const nextResult = data as ScanResult;
       setResult(nextResult);
       setSelectedBriefId(nextResult.briefs[0]?.id ?? null);
-      if (nextResult.errors.length > 0) {
-        setError(nextResult.errors.join(" "));
-      }
+      setSelectedEventIndex(nextResult.events.length > 0 ? 0 : null);
+      if (nextResult.errors.length > 0) setError(nextResult.errors.join(" "));
     } catch (scanError) {
       setError(
         scanError instanceof Error
@@ -240,8 +322,33 @@ export function Dashboard() {
             </p>
           </section>
 
+          <section className="mt-5">
+            <label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#64748b]">
+              Scan mode
+            </label>
+            <div className="mt-2 grid grid-cols-2 border border-[#cbd5e1] bg-white">
+              {[
+                ["new", "New only"],
+                ["reprocess", "Reprocess"],
+              ].map(([value, label]) => (
+                <button
+                  className={`h-10 text-sm font-semibold ${
+                    scanMode === value
+                      ? "bg-[#111827] text-white"
+                      : "text-[#334155]"
+                  }`}
+                  key={value}
+                  onClick={() => setScanMode(value as ScanMode)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </section>
+
           <button
-            className="mt-6 h-11 w-full bg-[#111827] px-4 text-sm font-semibold text-white transition hover:bg-[#273244]"
+            className="mt-6 h-11 w-full bg-[#111827] px-4 text-sm font-semibold text-white transition hover:bg-[#273244] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isScanning || normalizedTickers.length === 0}
             onClick={runScan}
             type="button"
@@ -281,9 +388,11 @@ export function Dashboard() {
         </aside>
 
         <section className="p-5 md:p-8">
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-6">
             {[
-              ["Filings scanned", result.summary.filingsScanned],
+              ["Filings", result.summary.filingsScanned],
+              ["New", result.summary.newFilingsProcessed],
+              ["Skipped", result.summary.filingsSkipped],
               ["Candidates", result.summary.candidatesFound],
               ["Briefs", result.summary.briefsGenerated],
               ["Suppressed", result.summary.filingsSuppressed],
@@ -310,8 +419,7 @@ export function Dashboard() {
 
               {result.briefs.length === 0 ? (
                 <div className="p-6 text-sm leading-6 text-[#64748b]">
-                  No scan results yet. Run a scan to fetch live SEC 8-K filings,
-                  or load the demo result to preview the review workflow.
+                  {postScanMessage(result)}
                 </div>
               ) : (
                 <div className="divide-y divide-[#e2e8f0]">
@@ -329,7 +437,7 @@ export function Dashboard() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-[#64748b]">
-                        {brief.targetCompany} · {brief.triggerType}
+                        {brief.targetCompany} / {brief.triggerType}
                       </p>
                     </button>
                   ))}
@@ -339,97 +447,185 @@ export function Dashboard() {
 
             <section className="min-h-[520px] border border-[#d5dae3] bg-white">
               {selectedBrief ? (
-                <div>
-                  <div className="border-b border-[#d5dae3] p-5">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-[#64748b]">
-                          {selectedBrief.sellerCompany} Sales Team
-                        </p>
-                        <h2 className="mt-1 text-2xl font-semibold">
-                          {selectedBrief.title}
-                        </h2>
-                      </div>
-                      <select
-                        className="h-10 border border-[#cbd5e1] bg-white px-3 text-sm"
-                        value={selectedBrief.status}
-                        onChange={(event) =>
-                          updateStatus(event.target.value as BriefStatus)
-                        }
-                      >
-                        {statusOptions.map((status) => (
-                          <option key={status}>{status}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-5 p-5">
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <Info label="Target" value={selectedBrief.targetCompany} />
-                      <Info label="Priority" value={selectedBrief.urgency} />
-                      <Info
-                        label="Confidence"
-                        value={`${selectedBrief.confidenceScore}%`}
-                      />
-                    </div>
-
-                    <BriefSection title="Evidence">
-                      “{selectedBrief.evidenceSnippet}”
-                    </BriefSection>
-                    <BriefSection title="Why CrowdStrike should care">
-                      {selectedBrief.whyItMatters}
-                    </BriefSection>
-                    <BriefSection title="Buyer personas">
-                      {selectedBrief.buyerPersonas.join(", ")}
-                    </BriefSection>
-                    <BriefSection title="Sales motion">
-                      {selectedBrief.suggestedSalesMotion}
-                    </BriefSection>
-                    <BriefSection title="Outreach angle">
-                      {selectedBrief.suggestedOutreachAngle}
-                    </BriefSection>
-                    <BriefSection title="Sensitivity">
-                      {selectedBrief.outreachSensitivity}
-                    </BriefSection>
-                    <BriefSection title="Next step">
-                      {selectedBrief.recommendedNextStep}
-                    </BriefSection>
-                    <BriefSection title="Why flagged">
-                      {selectedBrief.whyFlagged}
-                    </BriefSection>
-
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        className="h-10 border border-[#cbd5e1] px-4 text-sm font-semibold"
-                        onClick={() =>
-                          copyText(selectedBrief.suggestedOutreachAngle)
-                        }
-                        type="button"
-                      >
-                        Copy outreach angle
-                      </button>
-                      <button
-                        className="h-10 bg-[#111827] px-4 text-sm font-semibold text-white"
-                        onClick={() => copyText(briefToText(selectedBrief))}
-                        type="button"
-                      >
-                        Export brief text
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <BriefDetail
+                  brief={selectedBrief}
+                  copyText={copyText}
+                  updateStatus={updateStatus}
+                />
+              ) : selectedEvent ? (
+                <EventDetail event={selectedEvent} />
               ) : (
                 <div className="flex min-h-[520px] items-center justify-center p-8 text-center text-[#64748b]">
-                  Select a generated brief to inspect evidence, buyer personas,
-                  sales motion, sensitivity, and next step.
+                  Select a generated brief or scan log event to inspect the
+                  evidence path.
                 </div>
               )}
             </section>
           </div>
+
+          <section className="mt-5 border border-[#d5dae3] bg-white">
+            <div className="border-b border-[#d5dae3] p-4">
+              <h2 className="font-semibold">Scan log</h2>
+              <p className="mt-1 text-sm text-[#64748b]">
+                Shows why filings were skipped, suppressed, rejected, or turned
+                into briefs.
+              </p>
+            </div>
+            {result.events.length === 0 ? (
+              <div className="p-5 text-sm text-[#64748b]">
+                No scan log yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-[#e2e8f0]">
+                {result.events.map((event, index) => (
+                  <button
+                    className="grid w-full gap-3 p-4 text-left hover:bg-[#f8fafc] md:grid-cols-[120px_1fr_160px]"
+                    key={`${event.type}-${index}`}
+                    onClick={() => {
+                      setSelectedEventIndex(index);
+                      setSelectedBriefId(null);
+                    }}
+                    type="button"
+                  >
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#334155]">
+                      {eventLabel(event)}
+                    </span>
+                    <span className="text-sm text-[#334155]">
+                      {event.ticker ? `${event.ticker}: ` : ""}
+                      {event.rationale}
+                    </span>
+                    <span className="text-sm text-[#64748b]">
+                      {event.classification ??
+                        event.signalModule ??
+                        event.accessionNumber ??
+                        ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
         </section>
       </div>
     </main>
+  );
+}
+
+function BriefDetail({
+  brief,
+  copyText,
+  updateStatus,
+}: {
+  brief: SalesActionBrief;
+  copyText: (text: string) => Promise<void>;
+  updateStatus: (status: BriefStatus) => Promise<void>;
+}) {
+  return (
+    <div>
+      <div className="border-b border-[#d5dae3] p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-medium text-[#64748b]">
+              {brief.sellerCompany} Sales Team
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold">{brief.title}</h2>
+          </div>
+          <select
+            className="h-10 border border-[#cbd5e1] bg-white px-3 text-sm"
+            value={brief.status}
+            onChange={(event) => updateStatus(event.target.value as BriefStatus)}
+          >
+            {statusOptions.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid gap-5 p-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <Info label="Target" value={brief.targetCompany} />
+          <Info label="Priority" value={brief.urgency} />
+          <Info label="Confidence" value={`${brief.confidenceScore}%`} />
+        </div>
+
+        <BriefSection title="Evidence">
+          <span>&quot;{brief.evidenceSnippet}&quot;</span>
+        </BriefSection>
+        <BriefSection title="Why CrowdStrike should care">
+          {brief.whyItMatters}
+        </BriefSection>
+        <BriefSection title="Buyer personas">
+          {brief.buyerPersonas.join(", ")}
+        </BriefSection>
+        <BriefSection title="Sales motion">
+          {brief.suggestedSalesMotion}
+        </BriefSection>
+        <BriefSection title="Outreach angle">
+          {brief.suggestedOutreachAngle}
+        </BriefSection>
+        <BriefSection title="Sensitivity">
+          {brief.outreachSensitivity}
+        </BriefSection>
+        <BriefSection title="Next step">
+          {brief.recommendedNextStep}
+        </BriefSection>
+        <BriefSection title="Why flagged">{brief.whyFlagged}</BriefSection>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            className="h-10 border border-[#cbd5e1] px-4 text-sm font-semibold"
+            onClick={() => copyText(brief.suggestedOutreachAngle)}
+            type="button"
+          >
+            Copy outreach angle
+          </button>
+          <button
+            className="h-10 bg-[#111827] px-4 text-sm font-semibold text-white"
+            onClick={() => copyText(briefToText(brief))}
+            type="button"
+          >
+            Export brief text
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EventDetail({ event }: { event: ScanEvent }) {
+  return (
+    <div className="p-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#64748b]">
+        Scan event
+      </p>
+      <h2 className="mt-2 text-2xl font-semibold">{eventLabel(event)}</h2>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <Info label="Ticker" value={event.ticker ?? "N/A"} />
+        <Info label="Module" value={event.signalModule ?? "N/A"} />
+        <Info
+          label="Confidence"
+          value={
+            typeof event.confidence === "number"
+              ? `${Math.round(event.confidence * 100)}%`
+              : "N/A"
+          }
+        />
+      </div>
+      <div className="mt-5 grid gap-5">
+        <BriefSection title="Rationale">{event.rationale}</BriefSection>
+        <BriefSection title="Classification">
+          {event.classification ?? "N/A"}
+        </BriefSection>
+        <BriefSection title="Matched keywords">
+          {event.keywordMatches?.join(", ") || "N/A"}
+        </BriefSection>
+        <BriefSection title="Filing">
+          {event.accessionNumber ?? "N/A"}
+          {event.filingUrl ? ` / ${event.filingUrl}` : ""}
+        </BriefSection>
+      </div>
+    </div>
   );
 }
 
@@ -439,7 +635,7 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#64748b]">
         {label}
       </p>
-      <p className="mt-2 font-semibold">{value}</p>
+      <p className="mt-2 break-words font-semibold">{value}</p>
     </div>
   );
 }
@@ -456,7 +652,9 @@ function BriefSection({
       <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[#64748b]">
         {title}
       </h3>
-      <p className="mt-2 text-sm leading-6 text-[#334155]">{children}</p>
+      <p className="mt-2 break-words text-sm leading-6 text-[#334155]">
+        {children}
+      </p>
     </section>
   );
 }

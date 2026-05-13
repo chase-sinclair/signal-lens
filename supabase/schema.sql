@@ -91,13 +91,33 @@ create table if not exists scan_runs (
   id uuid primary key default gen_random_uuid(),
   seller_company_id uuid not null references seller_companies(id) on delete cascade,
   run_type text not null default 'manual',
+  scan_mode text not null default 'new',
   started_at timestamptz not null default now(),
   completed_at timestamptz,
   status text not null default 'running',
   total_filings_scanned integer not null default 0,
+  total_filings_skipped integer not null default 0,
   total_candidates integer not null default 0,
   total_briefs_generated integer not null default 0,
   total_filings_suppressed integer not null default 0
+);
+
+create table if not exists scan_events (
+  id uuid primary key default gen_random_uuid(),
+  scan_run_id uuid not null references scan_runs(id) on delete cascade,
+  event_type text not null,
+  ticker text,
+  target_company text,
+  accession_number text,
+  filing_date date,
+  filing_url text,
+  section_label text,
+  signal_module text,
+  keyword_matches text[] not null default '{}',
+  classification text,
+  confidence numeric,
+  rationale text not null,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists signal_candidates (
@@ -154,6 +174,7 @@ alter table monitored_targets enable row level security;
 alter table filings enable row level security;
 alter table filing_chunks enable row level security;
 alter table scan_runs enable row level security;
+alter table scan_events enable row level security;
 alter table signal_candidates enable row level security;
 alter table briefs enable row level security;
 alter table user_feedback enable row level security;

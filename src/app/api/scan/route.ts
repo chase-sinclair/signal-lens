@@ -6,6 +6,7 @@ import { ingestRecent8Ks } from "@/lib/scan/ingest";
 
 const scanRequestSchema = z.object({
   tickers: z.array(z.string()).min(1).max(25),
+  mode: z.enum(["new", "reprocess"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -20,7 +21,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await ingestRecent8Ks(parsed.data.tickers);
+    const result = await ingestRecent8Ks(parsed.data.tickers, {
+      mode: parsed.data.mode,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
